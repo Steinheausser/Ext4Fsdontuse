@@ -1008,6 +1008,9 @@ int _strnicmp(const char* str1, const char* str2, size_t count)
 
 #if !defined(_M_ARM64) && !defined(_M_ARM)
 
+/* newer MSVC (EWDK 28000) treats these as intrinsics; allow our definitions */
+#pragma function(strncmp, strncpy)
+
 int strncmp(const char* str1, const char* str2, size_t count)
 {
 	unsigned char c1, c2;
