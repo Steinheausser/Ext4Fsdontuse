@@ -78,15 +78,17 @@ function Get-SuperInfo([string]$vol) {
         @($ro, 0x2000, 'project'), @($ro, 0x8000, 'verity')
     )
     foreach ($m in $map) { if ($m[0] -band $m[1]) { $names += $m[2] } }
+    # s_def_hash_version 3..5 are the *_unsigned variants of 0..2
     $hashNames = @('legacy', 'half_md4', 'tea')
+    $hashVer = $sb[0xFC]
     $flags = & $u32 0x160
     [pscustomobject]@{
         Features      = ($names -join ',')
         BlockSize     = 1024 -shl (& $u32 0x18)
         InodeSize     = [BitConverter]::ToUInt16($sb, 0x58)
         FlexBgSize    = 1 -shl $sb[0x174]
-        HashAlg       = $hashNames[$sb[0xFC]]
-        UnsignedHash  = [bool]($flags -band 2)
+        HashAlg       = $hashNames[$hashVer % 3]
+        UnsignedHash  = [bool]($flags -band 2) -or ($hashVer -ge 3)
         BlocksCount   = [uint64](& $u32 0x04) + ([uint64](& $u32 0x150) -shl 32)
         UnknownBits   = ('compat 0x{0:X} incompat 0x{1:X} ro 0x{2:X}' -f $compat, $incompat, $ro)
     }
@@ -107,7 +109,8 @@ if ($vm.State -ne 'Off') { throw "$VMName must be off." }
 
 $mk = "mke2fs -F -t ext4 -L $Label -O none,$Features"
 if ($info) {
-    $mk += " -b $($info.BlockSize) -I $($info.InodeSize) -E hash_alg=$($info.HashAlg)"
+    # mke2fs has no option for the hash algorithm; it is set with debugfs below.
+    $mk += " -b $($info.BlockSize) -I $($info.InodeSize)"
     if ($Features -match 'flex_bg') { $mk += " -G $($info.FlexBgSize)" }
 }
 
@@ -122,9 +125,12 @@ try {
     Write-Host "Formatting $dev : $mk" -ForegroundColor Cyan
     wsl.exe -u root -e sh -c "$mk $dev"
     if ($LASTEXITCODE -ne 0) { throw "mke2fs failed ($LASTEXITCODE)" }
-    if ($UnsignedHash) {
-        wsl.exe -u root -e debugfs -w -R 'ssv flags 2' $dev
-        if ($LASTEXITCODE -ne 0) { throw "debugfs failed ($LASTEXITCODE)" }
+    $ssv = @()
+    if ($info) { $ssv += "ssv def_hash_version $($info.HashAlg)" }
+    if ($UnsignedHash) { $ssv += 'ssv flags 2' }
+    foreach ($c in $ssv) {
+        wsl.exe -u root -e debugfs -w -R $c $dev
+        if ($LASTEXITCODE -ne 0) { throw "debugfs '$c' failed ($LASTEXITCODE)" }
     }
     wsl.exe -u root -e sh -c "dumpe2fs -h $dev 2>/dev/null | grep -E 'features|flags|hash|Block size|Inode size|Flex'"
 } finally {

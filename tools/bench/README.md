@@ -65,6 +65,12 @@ and `GetLastError` and exits non-zero (1 = runtime failure, 2 = usage error).
 Keep the mode (and `--label`) identical when comparing runs, since the CSV records
 `durable_mode` per row.
 
+Why: up to and including commit c5a6adc, `FlushFileBuffers` on a volume handle
+flushed only file data. `Ext2Flush` (`Ext4Fsd/flush.c`) returned before
+`Ext2FlushVolume`, so the metadata (superblock, group descriptors, bitmaps, inode
+tables, directory blocks) stayed in the cache. On those builds `flushvol` is not
+durable and its timings are too low. Later builds flush the metadata too.
+
 `prep` and `b5` never run a durable step (`b5` cold performs a lock+dismount *before*
 timing, regardless of `--durable`).
 

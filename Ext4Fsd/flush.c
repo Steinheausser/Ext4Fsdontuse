@@ -206,12 +206,12 @@ Ext2Flush (IN PEXT2_IRP_CONTEXT IrpContext)
 
             Ext2VerifyVcb(IrpContext, Vcb);
             Status = Ext2FlushFiles(IrpContext, (PEXT2_VCB)(FcbOrVcb), FALSE);
-            if (NT_SUCCESS(Status)) {
+            if (!NT_SUCCESS(Status)) {
                 __leave;
             }
 
-            /* TO INVESTIGATE: Ext2FlushFiles will always return STATUS_SUCCESS so Ext2FlushVolume will never be called? */
-
+            /* file data is flushed, now flush the metadata (superblock,
+               group descriptors, bitmaps, inode tables and directories) */
             Status = Ext2FlushVolume(IrpContext, (PEXT2_VCB)(FcbOrVcb), FALSE);
 
             if (NT_SUCCESS(Status) && IsFlagOn(Vcb->Volume->Flags, FO_FILE_MODIFIED)) {

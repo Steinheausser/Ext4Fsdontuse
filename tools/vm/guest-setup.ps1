@@ -32,6 +32,8 @@ foreach ($store in @('Root', 'TrustedPublisher')) {
 }
 
 $target = "$env:SystemRoot\System32\drivers\Ext2Fsd.sys"
+# On a re-run the driver may be loaded: its image can be renamed but not overwritten.
+if (Test-Path $target) { Move-Item $target "$target.old" -Force }
 Copy-Item "$drv\Ext2Fsd.sys" $target -Force
 
 $svc = 'HKLM:\SYSTEM\CurrentControlSet\Services\Ext2Fsd'
